@@ -712,10 +712,12 @@ void FullNodeShardImpl::send_ihr_message(td::BufferSlice data) {
   auto B = create_serialize_tl_object<ton_api::tonNode_ihrMessageBroadcast>(
       create_tl_object<ton_api::tonNode_ihrMessage>(std::move(data)));
   if (B.size() <= overlay::Overlays::max_simple_broadcast_size()) {
-    td::actor::send_closure(overlays_, &overlay::Overlays::send_broadcast_ex, adnl_id_, overlay_id_, local_id_, 0,
+    td::actor::send_closure(overlays_, &overlay::Overlays::send_broadcast_ex, adnl_id_, overlay_id_,
+                            send_broadcast_as(), 0,
                             std::move(B));
   } else {
-    td::actor::send_closure(overlays_, &overlay::Overlays::send_broadcast_fec_ex, adnl_id_, overlay_id_, local_id_, 0,
+    td::actor::send_closure(overlays_, &overlay::Overlays::send_broadcast_fec_ex, adnl_id_, overlay_id_,
+                            send_broadcast_as(), 0,
                             std::move(B));
   }
 }
@@ -744,10 +746,12 @@ void FullNodeShardImpl::send_external_message(td::BufferSlice data) {
   auto B = create_serialize_tl_object<ton_api::tonNode_externalMessageBroadcast>(
       create_tl_object<ton_api::tonNode_externalMessage>(std::move(data)));
   if (B.size() <= overlay::Overlays::max_simple_broadcast_size()) {
-    td::actor::send_closure(overlays_, &overlay::Overlays::send_broadcast_ex, adnl_id_, overlay_id_, local_id_, 0,
+    td::actor::send_closure(overlays_, &overlay::Overlays::send_broadcast_ex, adnl_id_, overlay_id_,
+                            send_broadcast_as(), 0,
                             std::move(B));
   } else {
-    td::actor::send_closure(overlays_, &overlay::Overlays::send_broadcast_fec_ex, adnl_id_, overlay_id_, local_id_, 0,
+    td::actor::send_closure(overlays_, &overlay::Overlays::send_broadcast_fec_ex, adnl_id_, overlay_id_,
+                            send_broadcast_as(), 0,
                             std::move(B));
   }
 }
@@ -761,11 +765,11 @@ void FullNodeShardImpl::send_shard_block_info(BlockIdExt block_id, CatchainSeqno
   auto B = create_serialize_tl_object<ton_api::tonNode_newShardBlockBroadcast>(
       create_tl_object<ton_api::tonNode_newShardBlock>(create_tl_block_id(block_id), cc_seqno, std::move(data)));
   if (B.size() <= overlay::Overlays::max_simple_broadcast_size()) {
-    td::actor::send_closure(overlays_, &overlay::Overlays::send_broadcast_ex, adnl_id_, overlay_id_, local_id_, 0,
-                            std::move(B));
+    td::actor::send_closure(overlays_, &overlay::Overlays::send_broadcast_ex, adnl_id_, overlay_id_,
+                            send_broadcast_as(), 0, std::move(B));
   } else {
-    td::actor::send_closure(overlays_, &overlay::Overlays::send_broadcast_fec_ex, adnl_id_, overlay_id_, local_id_,
-                            overlay::Overlays::BroadcastFlagAnySender(), std::move(B));
+    td::actor::send_closure(overlays_, &overlay::Overlays::send_broadcast_fec_ex, adnl_id_, overlay_id_,
+                            send_broadcast_as(), overlay::Overlays::BroadcastFlagAnySender(), std::move(B));
   }
 }
 
@@ -782,8 +786,8 @@ void FullNodeShardImpl::send_block_candidate(BlockIdExt block_id, CatchainSeqno 
     return;
   }
   VLOG(FULL_NODE_DEBUG) << "Sending newBlockCandidate: " << block_id.to_str();
-  td::actor::send_closure(overlays_, &overlay::Overlays::send_broadcast_fec_ex, adnl_id_, overlay_id_, local_id_,
-                          overlay::Overlays::BroadcastFlagAnySender(), B.move_as_ok());
+  td::actor::send_closure(overlays_, &overlay::Overlays::send_broadcast_fec_ex, adnl_id_, overlay_id_,
+                          send_broadcast_as(), overlay::Overlays::BroadcastFlagAnySender(), B.move_as_ok());
 }
 
 void FullNodeShardImpl::send_broadcast(BlockBroadcast broadcast) {
@@ -797,8 +801,8 @@ void FullNodeShardImpl::send_broadcast(BlockBroadcast broadcast) {
     VLOG(FULL_NODE_WARNING) << "failed to serialize block broadcast: " << B.move_as_error();
     return;
   }
-  td::actor::send_closure(overlays_, &overlay::Overlays::send_broadcast_fec_ex, adnl_id_, overlay_id_, local_id_,
-                          overlay::Overlays::BroadcastFlagAnySender(), B.move_as_ok());
+  td::actor::send_closure(overlays_, &overlay::Overlays::send_broadcast_fec_ex, adnl_id_, overlay_id_,
+                          send_broadcast_as(), overlay::Overlays::BroadcastFlagAnySender(), B.move_as_ok());
 }
 
 void FullNodeShardImpl::download_block(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
@@ -898,8 +902,8 @@ void FullNodeShardImpl::alarm() {
     ping_neighbours_at_ = td::Timestamp::in(td::Random::fast(0.5, 1.0));
   }
   if (update_certificate_at_ && update_certificate_at_.is_in_past()) {
-    if (!sign_cert_by_.is_zero()) {
-      sign_new_certificate(sign_cert_by_);
+    if (!local_validator_key_.is_zero()) {
+      sign_new_certificate(local_validator_key_);
       update_certificate_at_ = td::Timestamp::in(30.0);
     } else {
       update_certificate_at_ = td::Timestamp::never();
@@ -969,7 +973,7 @@ void FullNodeShardImpl::signed_new_certificate(ton::overlay::Certificate cert) {
 }
 
 void FullNodeShardImpl::sign_overlay_certificate(PublicKeyHash signed_key, td::uint32 expire_at, td::uint32 max_size, td::Promise<td::BufferSlice> promise) {
-  auto sign_by = sign_cert_by_;
+  auto sign_by = local_validator_key_;
   if (sign_by.is_zero()) {
     promise.set_error(td::Status::Error("Node has no key with signing authority"));
     return;
@@ -1005,10 +1009,10 @@ void FullNodeShardImpl::update_validators(std::vector<PublicKeyHash> public_key_
     return;
   }
   bool update_cert = false;
-  if (!local_hash.is_zero() && local_hash != sign_cert_by_) {
+  if (!local_hash.is_zero() && local_hash != local_validator_key_) {
     update_cert = true;
   }
-  sign_cert_by_ = local_hash;
+  local_validator_key_ = local_hash;
 
   std::map<PublicKeyHash, td::uint32> authorized_keys;
   for (auto &key : public_key_hashes) {
@@ -1019,7 +1023,7 @@ void FullNodeShardImpl::update_validators(std::vector<PublicKeyHash> public_key_
   td::actor::send_closure(overlays_, &overlay::Overlays::set_privacy_rules, adnl_id_, overlay_id_, rules_);
 
   if (update_cert) {
-    sign_new_certificate(sign_cert_by_);
+    sign_new_certificate(local_validator_key_);
     update_certificate_at_ = td::Timestamp::in(30.0);
     alarm_timestamp().relax(update_certificate_at_);
   }

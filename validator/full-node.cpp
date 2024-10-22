@@ -40,19 +40,19 @@ void FullNodeImpl::add_permanent_key(PublicKeyHash key, td::Promise<td::Unit> pr
     update_custom_overlay(p.second);
   }
 
-  if (!sign_cert_by_.is_zero()) {
+  if (!local_validator_key_.is_zero()) {
     promise.set_value(td::Unit());
     return;
   }
 
   for (auto &x : all_validators_) {
     if (x == key) {
-      sign_cert_by_ = key;
+      local_validator_key_ = key;
     }
   }
 
   for (auto &shard : shards_) {
-    td::actor::send_closure(shard.second, &FullNodeShard::update_validators, all_validators_, sign_cert_by_);
+    td::actor::send_closure(shard.second, &FullNodeShard::update_validators, all_validators_, local_validator_key_);
   }
   promise.set_value(td::Unit());
 }
@@ -68,20 +68,20 @@ void FullNodeImpl::del_permanent_key(PublicKeyHash key, td::Promise<td::Unit> pr
     update_custom_overlay(p.second);
   }
 
-  if (sign_cert_by_ != key) {
+  if (local_validator_key_ != key) {
     promise.set_value(td::Unit());
     return;
   }
-  sign_cert_by_ = PublicKeyHash::zero();
+  local_validator_key_ = PublicKeyHash::zero();
 
   for (auto &x : all_validators_) {
     if (local_keys_.count(x)) {
-      sign_cert_by_ = x;
+      local_validator_key_ = x;
     }
   }
 
   for (auto &shard : shards_) {
-    td::actor::send_closure(shard.second, &FullNodeShard::update_validators, all_validators_, sign_cert_by_);
+    td::actor::send_closure(shard.second, &FullNodeShard::update_validators, all_validators_, local_validator_key_);
   }
   promise.set_value(td::Unit());
 }
@@ -183,7 +183,8 @@ void FullNodeImpl::add_shard(ShardIdFull shard) {
                       FullNodeShard::create(shard, local_id_, adnl_id_, zero_state_file_hash_, config_, keyring_, adnl_,
                                             rldp_, rldp2_, overlays_, validator_manager_, client_, actor_id(this)));
       if (all_validators_.size() > 0) {
-        td::actor::send_closure(shards_[shard], &FullNodeShard::update_validators, all_validators_, sign_cert_by_);
+        td::actor::send_closure(shards_[shard], &FullNodeShard::update_validators, all_validators_,
+                                local_validator_key_);
       }
     } else {
       break;
@@ -402,11 +403,11 @@ void FullNodeImpl::got_key_block_config(td::Ref<ConfigHolder> config) {
   // }
 
   all_validators_ = keys;
-  sign_cert_by_ = l;
+  local_validator_key_ = l;
   CHECK(all_validators_.size() > 0);
 
   for (auto &shard : shards_) {
-    td::actor::send_closure(shard.second, &FullNodeShard::update_validators, all_validators_, sign_cert_by_);
+    td::actor::send_closure(shard.second, &FullNodeShard::update_validators, all_validators_, local_validator_key_);
   }
 }
 

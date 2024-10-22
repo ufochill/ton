@@ -246,7 +246,7 @@ class FullNodeShardImpl : public FullNodeShard {
 
   overlay::OverlayIdFull overlay_id_full_;
   overlay::OverlayIdShort overlay_id_;
-  PublicKeyHash sign_cert_by_ = PublicKeyHash::zero();
+  PublicKeyHash local_validator_key_ = PublicKeyHash::zero();
   td::Timestamp update_certificate_at_;
   td::Timestamp sync_completed_at_;
 
@@ -263,6 +263,10 @@ class FullNodeShardImpl : public FullNodeShard {
   std::set<td::Bits256> my_ext_msg_broadcasts_;
   std::set<td::Bits256> processed_ext_msg_broadcasts_;
   td::Timestamp cleanup_processed_ext_msg_at_;
+
+  PublicKeyHash send_broadcast_as() const {
+    return local_validator_key_.is_zero() ? local_id_ : local_validator_key_;
+  }
 };
 
 }  // namespace fullnode

@@ -119,7 +119,7 @@ class FullNodeImpl : public FullNode {
 
   std::string db_root_;
 
-  PublicKeyHash sign_cert_by_;
+  PublicKeyHash local_validator_key_;
   std::vector<PublicKeyHash> all_validators_;
   std::map<PublicKeyHash, adnl::AdnlNodeIdShort> current_validators_;
 
