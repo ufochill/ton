@@ -574,3 +574,4 @@ class ValidatorSessionState : public ValidatorSessionDescription::RootObject {
 }  // namespace validatorsession
 
 }  // namespace ton
+
