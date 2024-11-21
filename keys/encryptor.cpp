@@ -181,3 +181,4 @@ std::vector<td::Result<td::BufferSlice>> Decryptor::sign_batch(std::vector<td::S
 }
 
 }  // namespace ton
+
