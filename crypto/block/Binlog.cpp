@@ -491,3 +491,4 @@ td::Result<int> BinlogBuffer::read_file() {
   return (int)res;
 }
 }  // namespace block
+
