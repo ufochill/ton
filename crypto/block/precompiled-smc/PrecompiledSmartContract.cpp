@@ -168,3 +168,4 @@ void set_precompiled_execution_enabled(bool value) {
 }
 
 }  // namespace block::precompiled
+
